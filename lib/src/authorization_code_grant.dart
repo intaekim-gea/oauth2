@@ -192,7 +192,9 @@ class AuthorizationCodeGrant {
     Map<String, String> additionalParameters = const {},
   }) {
     // Intae, Kim - '_state == _State.awaitingResponse' added to allow cancel
-    if (_state == _State.initial || _state == _State.awaitingResponse) {
+    if (_state == _State.initial ||
+        _state == _State.awaitingResponse ||
+        _state == _State.finished) {
     } else {
       throw StateError('The authorization URL has already been generated.');
     }
