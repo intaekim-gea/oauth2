@@ -10,8 +10,9 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
-import 'authorization_exception.dart';
+import 'authoization_implicit_grant.dart';
 import 'client.dart';
+import 'authorization_exception.dart';
 import 'credentials.dart';
 import 'handle_access_token_response.dart';
 import 'parameters.dart';
@@ -182,9 +183,20 @@ class AuthorizationCodeGrant {
   /// query parameters provided to the redirect URL.
   ///
   /// It is a [StateError] to call this more than once.
-  Uri getAuthorizationUrl(Uri redirect,
-      {Iterable<String>? scopes, String? state}) {
-    if (_state != _State.initial) {
+  Uri getAuthorizationUrl(
+    Uri redirect, {
+    Iterable<String>? scopes,
+    String? state,
+
+    // Intae, Kim - Args added to avoid code verification and additional args
+    bool useCodeVerifier = false,
+    Map<String, String> additionalParameters = const {},
+  }) {
+    // Intae, Kim - '_state == _State.awaitingResponse' added to allow cancel
+    if (_state == _State.initial ||
+        _state == _State.awaitingResponse ||
+        _state == _State.finished) {
+    } else {
       throw StateError('The authorization URL has already been generated.');
     }
     _state = _State.awaitingResponse;
@@ -201,13 +213,18 @@ class AuthorizationCodeGrant {
       'response_type': 'code',
       'client_id': identifier,
       'redirect_uri': redirect.toString(),
-      'code_challenge': codeChallenge,
-      'code_challenge_method': 'S256'
+      // Intae, Kim - Modified to give options.
+      if (useCodeVerifier) 'code_challenge': codeChallenge,
+      if (useCodeVerifier) 'code_challenge_method': 'S256'
     };
 
     if (state != null) parameters['state'] = state;
     if (scopeList.isNotEmpty) parameters['scope'] = scopeList.join(_delimiter);
 
+    // Intae, Kim - Modified to be able to overwrite arguments.
+    if (additionalParameters.isNotEmpty) {
+      parameters.addAll(additionalParameters);
+    }
     return addQueryParameters(authorizationEndpoint, parameters);
   }
 
@@ -231,6 +248,18 @@ class AuthorizationCodeGrant {
   /// Throws [AuthorizationException] if the authorization fails.
   Future<Client> handleAuthorizationResponse(
       Map<String, String> parameters) async {
+    if (parameters['access_token'] != null) {
+      // Intae, Kim - Modified to be able to receive access_token for implicit auth.
+      return await handleImplicitAuthorizationResponse(
+        parameters,
+        authorizationEndpoint,
+        identifier,
+        secret,
+        basicAuth: _basicAuth,
+        httpClient: _httpClient,
+      );
+    }
+
     if (_state == _State.initial) {
       throw StateError('The authorization URL has not yet been generated.');
     } else if (_state == _State.finished) {
